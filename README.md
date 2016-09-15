@@ -44,6 +44,6 @@ When your theme is released, only the files in `_layouts`, `_includes`, and `_sa
 
 ## License
 
-The theme is available as open source under the terms of the [MIT License](http://opensource.org/licenses/MIT).
+This is licensed under GPLv3. Any non-compliance is a bug.
 
 # blazeiburgess.github.io
