@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-_site
-.sass-cache
-=======
 _site/
 .sass-cache/
->>>>>>> 1db79b8ac20426aed9b4394893babb40a32b11f1
 .jekyll-metadata
+2016-09-14-welcome-to-jekyll.markdown
+*.swp
