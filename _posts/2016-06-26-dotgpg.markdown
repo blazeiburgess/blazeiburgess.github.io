@@ -1,0 +1,314 @@
+---
+layout: post
+title: 'dotgpg'
+date: 2016-06-26 16:21:50
+categories: post
+---
+<p>dotgpg is a ruby gem created for the purpose of allowing users to back up, version, and store production secrets in a heavily encrypted format.</p>
+<p>It&#8217;s stated purpose is to let sensitive information to be stored in (semi-)public locations, such as on Dropbox, Google Docs, or even in public repositories, while reducing risk that those secrets will be harvested and used.</p>
+<p>Information typically at risk can be:</p>
+<ul>
+<li>API Keys</li>
+<li>SSH ports and login</li>
+<li>Passwords for shared accounts</li>
+<li>Session secrets, environment secrets</li>
+</ul>
+<h3>Encryption in General</h3>
+<p>Encryption takes comprehensible information, then manipulates it in a patterned way, producing incomprehensible information. However, because the manipulation functions according to a pattern, there will be some way to reverse the process.</p>
+<p>If you were to multiply the first 15 numbers in the Fibonacci sequence, then square the result that would be a relatively easy operation to perform, but to anyone seeing the product  (<span class="s1">2547216) it would be difficult to see the pattern of the Fibonacci sequence that underlies it.</span></p>
+<pre class="brush: r; title: ; notranslate" title="">
+&amp;gt; (610 + 377 + 233 + 144 + 89 + 55 + 34 + 21 + 13 + 8 + 5 + 3 + 2 + 1 + 1) ^ 2
+[1] 2547216
+</pre>
+<p>To reverse this you need to understand two things about the result:</p>
+<ol>
+<li>the process that the information was put through (summed and then squared)</li>
+<li>the type of information that was passed in (the fibbonaci sequence</li>
+</ol>
+<p>This does not immediately tell you that it operated on the first fifteen numbers, but it provides enough information to reverse the process.</p>
+<p>This is why decently complex encryption, such as base64, is essentially useless. The patterns that you use to encrypt and decrypt are known, so any encryption is easiy reversible.</p>
+<h2>GPG</h2>
+<p>GPG is an encryption and signing service that operates on the OpenPGP standard. It can perform the function of encryption more than one way, but it is possibly best known for it&#8217;s use of a public-private key structure of encryption, which cannot be compromised unless someone gains access to your private key as well as your password.</p>
+<p>This works because of the way information is shared between the public and private keys. The public key has enough information to encrypt a message that only the corresponding private key can decrypt. The principle at work here is that it is easier to perform certain operations than it is solve a completed operation into it&#8217;s component parts.</p>
+<p>The public key only contains enough information to engineer a passable cipher, but only enough to make something that it&#8217;s corresponding private key is capable of decrypting.</p>
+<p>This makes the password less susceptible to brute force attacks or being compromised through phishing as the password and public key, by themselves or combined, are insufficient to decrypt any message encrypted with them.</p>
+<p>The only way to actually break the code reliably and in a reasonable space of time is to get access to the private key, which generally implies compromising or otherwise gaining access the one computer that is actually storing that private key.</p>
+<h2>PGP Standard</h2>
+<p>The specifics of the PGP standard involve a mixing of two different forms of encryption-decryption. The first form is the asymmetric public-private key standard described above, where the key used to encrypt can be freely transferred while the key used to decrypt remains safely on the disk of whoever create the key pair. The second is a symmetric encryption-decryption pattern that relies on a user-determined password.</p>
+<p>According to PGP this was an efficiency choice. It allows the private key, which takes the longest out of any of these processes, to perform less overall decryption work while still performing it&#8217;s basic function as a stationary and necessary key function. This does put some responsibility back on the user, as someone using their computer or otherwise gaining access to the private key would only have to break the password to decrypt any personal messages, but a secure password could also function as a final line of defense in case the private key does somehow fall into the wrong hands.</p>
+<h2>Caesar Cipher</h2>
+<p>One of the problems that the private-public key approach avoids is the passing of information to decrypt the message.</p>
+<p>The Caesar Cipher has this basic problem. It is just a simple substitution cipher, replacing some letters in the alphabet with others. It&#8217;s easily recreatable in ruby by using the <code>#tr</code> method</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :001 &gt; &quot;hello world&quot;.tr(&quot;abcdefghijklmnopqrstuvwxyz&quot;, &quot;qwertyuiopasdfghjklzxcvbnm&quot;)
+ =&gt; &quot;itssg vgksr&quot;
+</pre>
+<p>This is very weak against linguistic analysis, such as mapping most common letters and checking viable words against word length, but the greatest danger, especially at the time of it&#8217;s greatest use, is in passing the decryption method without having it fall into unintended hands.</p>
+<p>This is the problem that the private-public key method tries to avoid because the encryption is not symmetrical. With symmetrical encryption, the message can be easily decrypted using the same key:</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :001 &gt; &quot;itssg vgksr&quot;.tr(&quot;qwertyuiopasdfghjklzxcvbnm&quot;, &quot;abcdefghijklmnopqrstuvwxyz&quot;)
+ =&gt; &quot;hello world&quot;
+</pre>
+<p>Asymmetric encryption is especially strong in the regard of transferring information because the public key is incapable of performing the work of the private key, but is still enough to encrypt a message that only the private key can decrypt.</p>
+<h2>dotgpg</h2>
+<p>dotgpg was written to simplify the interface of gpg to basically three commands, five commands if you include a few that are used less often. It is intended to be used primarily as a cli.</p>
+<p>The basic functionality is:</p>
+<ul>
+<li><code>dotgpg init</code>
+<ul>
+<li>Builds the directory structure, including the <code>.gpg</code> folder</li>
+<li>Creates a gpg account for the user and requests a password</li>
+<li>Generates the private-public key pair</li>
+</ul>
+</li>
+<li><code>dotgpg edit</code>
+<ul>
+<li>has an optional parameter of an existing filename</li>
+<li>opens or creates a file that is encrypted on being saved</li>
+</ul>
+</li>
+<li><code>dotgpg cat</code>
+<ul>
+<li>decrypts a file and displays the message in terminal</li>
+<li>NOTE: only works on signed (asymmetrical) encryptions</li>
+</ul>
+</li>
+<li><code>dotgpg unsafe_cat</code>
+<ul>
+<li>decrypts an unsigned (symmetric) encrypted file</li>
+<li>NOTE: this is called unsafe because it cannot verify the identity, thus source, of the key that encrypted the message</li>
+</ul>
+</li>
+<li><code>dotgpg add</code>
+<ul>
+<li>will prompt you to paste in a public key</li>
+<li>adds the key to the directory structure</li>
+<li>reencrypts all files in the folder to be readable by the corresponding private key</li>
+</ul>
+</li>
+<li><code>dotgpg key</code>
+<ul>
+<li>simply exports and displays your public key</li>
+<li>only necessary if you are not the founder of the project or want to use your public key for purposes outside of the dotgpg structrue</li>
+</ul>
+</li>
+<li><code>dotgpg merge</code>
+<ul>
+<li>used for git compatibility</li>
+</ul>
+</li>
+</ul>
+<h2>Using dotgpg</h2>
+<p>Installation is as simple as any gem if you already have ruby installed.</p>
+<pre class="brush: bash; title: ; notranslate" title="">
+$ gem install dotgpg
+Fetching: gpgme-2.0.12.gem (100%)
+Building native extensions.  This could take a while...
+Successfully installed gpgme-2.0.12
+Fetching: dotgpg-0.6.1.gem (100%)
+Successfully installed dotgpg-0.6.1
+Parsing documentation for gpgme-2.0.12
+Installing ri documentation for gpgme-2.0.12
+Parsing documentation for dotgpg-0.6.1
+Installing ri documentation for dotgpg-0.6.1
+Done installing documentation for gpgme, dotgpg after 4 seconds
+2 gems installed
+</pre>
+<p>Instantly it allows you several options from the commandline that are mostly fairly easy to understand</p>
+<pre class="brush: bash; title: ; notranslate" title="">
+$ dotgpg
+Commands:
+  dotgpg add [PUBLIC_KEY]               # add a user's public key
+  dotgpg cat FILES...                   # decrypt and print files
+  dotgpg edit FILES...                  # edit and re-encrypt files
+  dotgpg help [COMMAND]                 # Describe available commands or one specific command
+  dotgpg init [DIRECTORY]               # create a new dotgpg directory
+  dotgpg key                            # export your GPG public key in a format that `dotgpg add` will under...
+  dotgpg merge MYFILE OLDFILE YOURFILE  # dotgpg-aware wrapper for merging via diff3(1)
+  dotgpg rm KEY                         # remove a user's public key
+  dotgpg unsafe_cat FILES...            # unsafely decrypt and print files
+
+Options:
+  -h, [--help], [--no-help]  # Show help
+</pre>
+<p>You can already, for example, import someone&#8217;s public key and send them an encrypted message or simply use this as a gpg cli if you run.</p>
+<pre class="brush: bash; title: ; notranslate" title="">
+$ dotgpg init
+</pre>
+<p>The actual methods of interest here, though, are what can be used internal to ruby. If you open IRB, then you can create a secret key object in the following way:</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :001 &amp;gt; require 'dotgpg'
+ =&amp;gt; true
+2.3.0 :002 &amp;gt; key = Dotgpg::Key.secret_key('blaze.burgess@flatironschool.com')
+Creating a new GPG key: blaze.burgess@example.com &amp;amp;lt;blaze.burgess@flatironschool.com&amp;gt;
+Passphrase:
+Passphrases should be secure! (&amp;gt;=10 chars)
+Passphrase:
+Passphrase confirmation:
+Generating large prime numbers, please wait...
+ =&amp;gt; #&amp;amp;lt;GPGME::Key sec 2048R/C4052465 2016-07-17 trust=nil, owner_trust=:unknown, capability=[:encrypt, :sign, :certify, :authenticate], subkeys=[#&amp;amp;lt;GPGME::SubKey ssc 2048R/C4052465 2016-07-17 trust=nil, capability=[:encrypt, :sign, :certify, :authenticate]&amp;gt;, #&amp;amp;lt;GPGME::SubKey ssc 2048R/F0500A9E 2016-07-17 trust=nil, capability=[:encrypt, :sign, :certify, :authenticate]&amp;gt;], uids=[#&amp;amp;lt;GPGME::UserID blaze.burgess@example.com &amp;amp;lt;blaze.burgess@flatironschool.com&amp;gt; validity=unknown, signatures=[]&amp;gt;]&amp;gt;
+</pre>
+<p>You&#8217;re output would likely look different as mine already had a gpg profile setup &#8220;@example.com&#8221; under which the new profile &#8220;@flatironschool.com&#8221; is placed. Also, if you type in an instantly secure password it will not tell admonish you for not having done so.</p>
+<p>But the result is the same in any case. A GPGME object with certain accessors and methods.</p>
+<p>This can be setup numerous ways, but the real power of automation comes in if you import the Cli class, which allows you to code Ruby objects that perform gpg functions. So, for example, to display your public key, you need only take the following steps:</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :003 &amp;gt; cli = Dotgpg::Cli.new
+ =&amp;gt; #&amp;amp;lt;Dotgpg::Cli:0x007fb0e907c528 @behavior=:invoke, @_invocations={}, @_initializer=[[], {}, {}], @options={}, @args=[], @shell=#&amp;amp;lt;Thor::Shell::Color:0x007fb0e9983ce8 @base=#&amp;amp;lt;Dotgpg::Cli:0x007fb0e907c528 ...&amp;gt;, @mute=false, @padding=0, @always_force=false&amp;gt;, @destination_stack=[&amp;amp;quot;/Users/blazeburgess&amp;amp;quot;]&amp;gt;
+2.3.0 :004 &amp;gt; cli.key
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: GnuPG v1
+
+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
+eXsrZUiSo1I4ec/1
+=IdjB
+-----END PGP PUBLIC KEY BLOCK-----
+ =&amp;gt; nil
+</pre>
+<p>The purpose of the dotgpg gem is to place sensitive files in a <code>.gpg</code> directory that anyone involved has access to and which stores all the keys of anyone that needs to be involved in the communication.</p>
+<p>This is a bit tricky to actually implement, though, as it requires setting up several elements that then work together. First you need to set up a directory structure. For example, to set this up in a project directory in Documents:</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :005 &amp;gt; dir = Dotgpg::Dir.new(ENV[&amp;amp;quot;HOME&amp;amp;quot;] + &amp;amp;quot;/Documents/project&amp;amp;quot;)
+ =&amp;gt; #&amp;amp;lt;Dotgpg::Dir:0x007fc2c2135f10 @path=#&amp;amp;lt;Pathname:/Users/blazeburgess/Documents/project&amp;gt;&amp;gt;
+</pre>
+<p>Unfortunately, this only allows dotgpg to read this directory as parent, but it won&#8217;t actually create the `.gpg` directory it needs to store and handle secrets. You can do this manually in irb/pry:</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :006 &amp;gt; %x{ mkdir #{dir.path.to_path}/.gpg }
+ =&amp;gt; &amp;amp;quot;&amp;amp;quot;
+</pre>
+<p>Or just go to the directory in terminal and make the folder. Once this is setup, the program can begin to take over to a greater extent. Two methods can confirm where you are in this process:</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :007 &amp;gt; dir.dotgpg? # This checks if the `.gpg` directory exists
+ =&amp;gt; true
+2.3.0 :008 &amp;gt; dir.known_keys # Should be empty as no keys could have been added at this point
+ =&amp;gt; []
+</pre>
+<p>Adding a key is less straightforward than you may think as well. It relies on a `dir.add_key(key)` method, but it can only take in a GPGME::Key object, where as the `key` made earlier is a Dotgpg::Key object. To get the underlying key, you have to call a `#secret_key` method.</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :009 &amp;gt; dir.add_key(key) # this produces an error
+NoMethodError: undefined method `email' for #&amp;amp;lt;Dotgpg::Key:0x007fc2c20e7ae0&amp;gt;
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/dir.rb:202:in `key_path'
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/dir.rb:180:in `block in add_key'
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/dir.rb:124:in `reencrypt'
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/dir.rb:179:in `add_key'
+  from (irb):82
+  from /Users/blazeburgess/.rvm/rubies/ruby-2.3.0/bin/irb:11:in `&amp;amp;lt;main&amp;gt;'
+2.3.0 :010 &amp;gt; dir.add_key(key.secret_key) # this returns nothing, but works
+ =&amp;gt; nil
+2.3.0 :011 &amp;gt; dir.known_keys # this now has a return value
+ =&amp;gt; [#&amp;amp;lt;GPGME::Key pub 2048R/9C9CDB6C 2016-07-17 trust=nil, owner_trust=:ultimate, capability=[:encrypt, :sign, :certify, :authenticate], subkeys=[#&amp;amp;lt;GPGME::SubKey sub 2048R/9C9CDB6C 2016-07-17 trust=nil, capability=[:encrypt, :sign, :certify, :authenticate]&amp;gt;, #&amp;amp;lt;GPGME::SubKey sub 2048R/3202696E 2016-07-17 trust=nil, capability=[:encrypt, :sign, :certify, :authenticate]&amp;gt;], uids=[#&amp;amp;lt;GPGME::UserID blaze.burgess@flatironschool.com &amp;amp;lt;blaze.i.burgess@gmail.com&amp;gt; validity=ultimate, signatures=[]&amp;gt;]&amp;gt;]</pre>
+<p>In the source code, there is an extra bit of magic to this `#add` method that actually reencrypts every file in the `.gpg` directory, giving the newcomer access to decrypt files in the directory themselves. The method relies on other methods, but the meaning is fairly plain-language:</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+def add_key(key)
+  reencrypt all_encrypted_files do
+    File.write key_path(key), key.export(armor: true).to_s
+  end
+end
+</pre>
+<p>&nbsp;</p>
+<p>Creating and encrypting a message is very simple from here. (To keep this simple, I am encrypting a file from myself to myself, which means that I don&#8217;t have to deal with other public keys. This could be useful for secrets you don&#8217;t want to forget, but not for sharing those secrets.)</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :020 &amp;gt; cli.edit(ENV[&amp;amp;quot;HOME&amp;amp;quot;] + &amp;amp;quot;/Documents/project/.gpg/test.txt.gpg&amp;amp;quot;)
+GPG passphrase for blaze.burgess@flatironschool.com:  # this is a prompt
+ =&amp;gt; nil
+</pre>
+<p>If you `cat` this created message in bash it returns:</p>
+<pre class="brush: bash; title: ; notranslate" title="">
+blazeburgess@computer:~/Documents/project$ cat .gpg/test.txt.gpg
+-----BEGIN PGP MESSAGE-----
+Version: GnuPG v1
+
+hQEMA3i9rwUyAmluAQgAsGLAaLkUbt5G1UousjAZwB/ISbhnjaBocA1akq0kmaY7
+244jjlggRryaIKnMrsbcHc9jC7CAqcuxh0AdgE+OoQlduKF57DGOCOGRtDgzZQOY
+1SyYlWr5LLB9u+cyA8vBHIDX3h8K/vndwDi5OUqnAASK1oTRsjI7nnbNTuH/eZ/+
+uY6Gc260n5nAA5VAqasYMMn5BSFED4sUr2qqQ/V13KhwFWFGRx2BARoafYybAFnu
+NcLCOPscZhNCzYJOMvlXFHgpqFIcHgSmCq9IHCabMh2efmRTJSCk4Zp7dRMl/jea
+CdP9ap4np68Ry+o/sZPw4paf88NJGrLXRQVudqlEqNLAzgG5mgzULs2aeZX4GXoQ
+kzKJQ4fyRG0ua4lLPS27uSA9SxOHjmateEEK4PP4bCBswgL4ML0iDUzJUGcE7BDK
++MU5CyGcKDDM6wR6TgDqvEvcuz6KU8tyKfANH45stAjvf+9dI86UsJjjhMo3K2bs
+490Ufx+rmxkyT80kN4wYfJAO/aqa8ZkQsGKpWGu3J/7Mjd9dMS4Io19DuMeCYkst
+UxnSe68w7chb4bkh6NyOVlwdTaGlc+5LuQptGu+IOtcxIl+J5Wxlmzg4cPZwLMxz
++NvAKyGBP6rf2WxSnSvKbCVmh/MwKqjqj2truKAUBwcTQ1kDgSW6Wd24S6+ucTU8
+T0IEJ9nyNYqLrwXheTc000NdmhdgJRZvKKzBouG7EioPeeW0AOuy1nGH2dyABg4D
+d9/KQJB0v8wdYEyO1Aot23NWhxlt/LuOY3lKSNyM6WTv4eiPy+0QIf3dnipg8hXw
+qG6CFYmyndeumNukunVNlHnrsQXRMvn0fs1R3CxfTPnsZbWoOVTimbP+yGDra7kZ
+=Gfxb
+-----END PGP MESSAGE-----
+</pre>
+<p>Decryption is easiest done with the cli object. You have to setup one of two options to use it in a Ruby interpreter, though. Either `Dotgpg.passphrase = ` or set `Dotgpg.interactive = true`. This lets you</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+Dotgpg.passphrase = 'apples' # Note: gpg won't even let you use a password like this
+</pre>
+<p>or,</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+Dotgpg.interactive = true # This will prompt you when something needs user authorization/input
+</pre>
+<p>The former would be better for automating tasks, but it would also mean that you are hardcoding you actual password into plain-text. If there is any scripting use for these options, it would probably be best to enable interaction and input/validate actions when necessary. Otherwise, the point of having a password is rendered moot.</p>
+<p>From here, there are two ways to decrypt single messages. They are the `#cat` and `#unsafe_cat` methods, respectively. `#cat` is preferable because it validates signatures, effectively verifying the source of the information and that the document has not changed since originally signed. `#unsafe_cat` is the only option for decrypting unsigned files, but it is worthwhile always trying `#cat` first, as that gives some indication as to how trustworthy the information is. Calling either method prompts you to put in your password, then passes the result to your private key for decryption.</p>
+<p>If we wanted to decrypt the message we made above, you only have to call</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :022 &amp;gt; cli.cat(ENV[&amp;amp;quot;HOME&amp;amp;quot;] + &amp;amp;quot;/Documents/project/.gpg/test.txt.gpg&amp;amp;quot;) # this won't necessarily prompt you for a password if you've just used one to encrypt it, though I'm not sure exactly what/how long your password is retained
+This is test text in a test file
+ =&amp;gt; [&amp;amp;quot;/Users/blazeburgess/Documents/project/.gpg/test.txt.gpg&amp;amp;quot;]
+</pre>
+<p>This `puts` the message and returns an array of the file(s) that were decrypted.</p>
+<p>So, for some_unsigned_encrypted_file.txt.gpg (which I made using unsafe symmetrical encryption by writing the text file, then just calling `gpg -c some_unsigned_encrypted_file.txt` in bash)</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :013 &amp;gt; cli.cat(ENV[&amp;amp;quot;HOME&amp;amp;quot;] + &amp;amp;quot;/Documents/some_unsigned_encrypted_file.txt.gpg&amp;amp;quot;)
+GPG passphrase for :
+Dotgpg::InvalidSignature: file was not signed
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/dir.rb:66:in `block in decrypt'
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/dir.rb:59:in `open'
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/dir.rb:59:in `decrypt'
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/cli.rb:97:in `block in cat'
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/cli.rb:96:in `each'
+  from /Users/blazeburgess/.rvm/gems/ruby-2.3.0/gems/dotgpg-0.6.1/lib/dotgpg/cli.rb:96:in `cat'
+  from (irb):51
+  from /Users/blazeburgess/.rvm/rubies/ruby-2.3.0/bin/irb:11:in `&amp;amp;lt;main&amp;gt;'
+</pre>
+<p>fails, while</p>
+<pre class="brush: ruby; title: ; notranslate" title="">
+2.3.0 :014 &amp;gt; cli.unsafe_cat(ENV[&amp;amp;quot;HOME&amp;amp;quot;] + &amp;amp;quot;/Documents/some_unsigned_encrypted_file.txt.gpg&amp;amp;quot;)
+This message is a secret.
+ =&amp;gt; [&amp;amp;quot;/Users/blazeburgess/Documents/some_unsigned_encrypted_file.txt.gpg&amp;amp;quot;]
+</pre>
+<p>again, `puts` the message and returns an array of the files decrypted.</p>
+<p>For interest, in bash `cat` returns</p>
+<pre class="brush: bash; title: ; notranslate" title="">
+blazeburgess@computer:~/Documents/project$ cat some_unsigned_encrypted_file.txt.gpg
+?n?c?J]?`?Jʈ??͙S??׿?u??h?A?L?J??Z??̎ءxt?mh1\?Gi??ȓb??GX?m?m?_?=????d{?D?b
+</pre>
+<p>This is the basic functionality of dotgpg. Internal to itself, it will encrypt and sign files so long as you use the <code>#edit</code> method, but it can interact with unsigned files and/or symmetrical encryption just as easily. The point of the gem is to create a shared or private directory containing all production secrets in a heavily encrypted format.</p>
+<h2>Sources</h2>
+<p><a href="http://www.rubydoc.info/gems/dotgpg/0.6.1">RubyDocs</a></p>
+<p><a href="https://cirw.in/blog/dotgpg">ConradIrwin&#8217;s dotgpg — easy to use storage for your production secrets</a></p>
+<p><a href="http://www.cs.unibo.it/babaoglu/courses/security/resources/documents/intro-to-crypto.pdf">An Introduction to Cryptography by PGP Corporation</a></p>
